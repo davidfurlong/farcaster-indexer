@@ -19,16 +19,7 @@ function indexCasts() {
 
 		const startTime = Date.now()
 		const db = client.db('farcaster')
-		const oldConnection = db.collection('casts')
-		const newCollection = db.collection('casts_temp')
-
-		// If the temp table already exists, drop it
-		try {
-			await newCollection.drop()
-		} catch {}
-
-		// Avoid indexing duplicate casts
-		await newCollection.createIndex({ merkleRoot: 1 }, { unique: true })
+		const connection = db.collection('casts')
 
 		const provider = new providers.AlchemyProvider(
 			'rinkeby',
@@ -41,36 +32,13 @@ function indexCasts() {
 			provider
 		)
 
-		let usersIndexed = 0
-		const numberOfUsers = await registryContract.usernamesLength()
-			.catch(() => {
-				console.error('Error getting number of users from contract')
-				return 0
-			})
+		const usersToScrape = ['username']
 
-		if (numberOfUsers === 0) {
-			return
-		} else {
-			console.log(`Indexing ${numberOfUsers} users...`)
-		}
-
-		for (let i = 0; i < numberOfUsers; i++) {
-			const byte32Name = await registryContract
-				.usernameAtIndex(i)
-				.catch(() => {
-					console.log(`Could not get username at index ${i}`)
-					return null
-				})
-
-			if (!byte32Name) break
-
+		for (let i = 0; i < usersToScrape.length; i++) {
 			const directoryUrl = await registryContract.getDirectoryUrl(
-				byte32Name
+				utils.formatBytes32String(usersToScrape[i])
 			)
-			const username = utils.parseBytes32String(byte32Name)
-
-			// Skip test accounts
-			if (username.startsWith('__tt__')) continue
+			const username = usersToScrape[i]
 
 			try {
 				const activityUrl = await got(directoryUrl)
@@ -81,37 +49,30 @@ function indexCasts() {
 				const activity = await got(activityUrl).json()
 
 				if (activity.length > 0) {
-					await newCollection
+					await connection
 						.insertMany(activity)
-						.then(() => usersIndexed++)
+						.then(() => console.log(`${username} inserted`))
 						.catch((err) => {
-							console.log(`Error saving ${username}'s casts.`, err.message)
+							console.log(
+								`Error saving ${username}'s casts.`,
+								err.message
+							)
 						})
+				} else {
+					console.log(`${username} has no casts.`)
 				}
 			} catch (err) {
-				// Ignore issues with testing accounts
-				if (!directoryUrl.includes('localhost')) {
-					// console.log(`Unable to get ${username}'s activity at directory ${directoryUrl}`)
-				}
+				console.log(`Error scraping ${username}'s casts.`, err.message)
 			}
 		}
-
-		// Replace existing collection with new casts
-		try {
-			await oldConnection.drop()
-		} catch (err) {
-			console.log('Error dropping collection.', err.codeName)
-		}
-		await newCollection.rename('casts')
 
 		client.close()
 		const endTime = Date.now()
 		const secondsTaken = (endTime - startTime) / 1000
-		console.log(`Indexed ${usersIndexed} users in ${secondsTaken} seconds`)
+		console.log(
+			`Indexed ${usersToScrape.length} users in ${secondsTaken} seconds`
+		)
 	})
 }
 
-// Run job every hour
-cron.schedule('0 */1 * * *', async () => {
-	indexCasts()
-})
+indexCasts()
