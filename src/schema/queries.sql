@@ -59,3 +59,60 @@ total_casters AS (
 SELECT * FROM verified_avatar
 UNION
 SELECT * FROM total_casters;
+
+
+-- Trending profiles over the last 7 days
+WITH casts_per_profile AS (
+  SELECT
+    address,
+    COUNT(*)
+  FROM
+    casts
+  WHERE (to_timestamp(published_at / 1000) > (now() - interval '7 days'))
+GROUP BY
+  address
+),
+engagement_per_profile AS (
+  SELECT
+    address,
+    COALESCE(SUM(reactions),
+      0) AS reactions,
+    COALESCE(SUM(recasts),
+      0) AS recasts,
+    COALESCE(SUM(watches),
+      0) AS watches,
+    COALESCE(SUM(num_reply_children),
+      0) AS replies
+  FROM
+    casts
+  WHERE (to_timestamp(published_at / 1000) > (now() - interval '7 days'))
+GROUP BY
+  address
+),
+followers_per_profile AS (
+  SELECT
+    address,
+    username,
+    followers
+  FROM
+    profiles
+)
+SELECT
+  followers_per_profile.address AS address,
+  username,
+  casts_per_profile.count AS casts,
+  followers,
+  reactions,
+  recasts,
+  watches,
+  replies,
+  ((recasts * 3) + (watches * 2) + replies + reactions) AS score
+FROM
+  followers_per_profile
+  JOIN casts_per_profile ON followers_per_profile.address = casts_per_profile.address
+  JOIN engagement_per_profile ON followers_per_profile.address = engagement_per_profile.address
+WHERE
+  casts_per_profile.count > 1
+ORDER BY
+  score DESC
+LIMIT 50;
