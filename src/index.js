@@ -3,6 +3,7 @@ import got from 'got'
 import cron from 'node-cron'
 import { providers, Contract, utils } from 'ethers'
 import { createClient } from '@supabase/supabase-js'
+import { createWorker } from 'tesseract.js'
 
 import abi from './registry-abi.js'
 import { breakIntoChunks, cleanUserActivity, getProfileInfo } from './utils.js'
@@ -22,6 +23,11 @@ const registryContract = new Contract(
   abi,
   provider
 )
+
+const imgWorker = createWorker({
+  logger: m => console.log(m)
+})
+const imgConfidenceLevel = 70 // can be tweaked to include more or fewer results
 
 /**
  * Index all profiles in the Farcaster account registry and insert them into a Supabase table.
@@ -58,12 +64,29 @@ async function indexCasts() {
 
     // Exclude deletes and recasts
     const cleanedActivity = cleanUserActivity(activity)
+    const imgurUrl = 'https://i.imgur.com/'
 
-    cleanedActivity.map((cast) => {
+    cleanedActivity.map(async (cast) => {
       // TODO: add URI support for non-parent casts
-      const uri = cast.body.data.replyParentMerkleRoot
+      let uri = cast.body.data.replyParentMerkleRoot
         ? null
         : `farcaster://casts/${cast.merkleRoot}/${cast.merkleRoot}`
+
+      if (cast.body.data.text.includes(imgurUrl)) {
+        let image = imgurUrl + cast.body.data.text.split(imgurUrl)[1]
+        console.log(image)
+        // TODO -- this diverges from the image variable when the map is applied.
+        // Need to be able to keep track of both the input image url / cast id & the output
+        let data = await worker.recognize(image);
+        if (data.data.confidence >= imgConfidenceLevel) {
+          // TODO do something with data.data.text (store in a column? different table?)
+          // Different table is a good option b/c you could check if translation exists already & avoid re-indexing if so
+          console.log(data.data.text);
+        } else {
+          // just for debugging
+          console.log('skipping')
+        }
+      }
 
       allCasts.push({
         published_at: cast.body.publishedAt,
@@ -241,5 +264,9 @@ cron.schedule('0 */2 * * *', () => {
 
 // Run job 30 mins
 cron.schedule('*/30 * * * *', () => {
+  await worker.load()
+  await worker.loadLanguage('eng')
+  await worker.initialize('eng')
   indexCasts()
+  await worker.terminate()
 })
