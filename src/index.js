@@ -11,6 +11,7 @@ import {
   getProfileInfo,
   getEthPrice,
   getErc20Price,
+  breakIntoChunks,
 } from './utils.js'
 
 const supabase = createClient(
@@ -95,22 +96,26 @@ async function indexCasts() {
     profilesIndexed++
   }
 
-  const { count, error: upsertCastError } = await supabase
-    .from('casts')
-    .upsert(allCasts, {
-      count: 'exact',
+  // Break allCasts into chunks of 1000
+  const chunks = breakIntoChunks(allCasts, 1000)
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i]
+
+    const { error } = await supabase.from('casts').upsert(chunk, {
       onConflict: 'merkle_root',
     })
 
-  if (upsertCastError) {
-    console.error(upsertCastError)
-    return
+    if (error) {
+      console.error(error)
+      return
+    }
   }
 
   const endTime = Date.now()
   const secondsTaken = (endTime - startTime) / 1000
   console.log(
-    `Saved ${count} casts from ${profilesIndexed} profiles in ${secondsTaken} seconds`
+    `Saved casts from ${profilesIndexed} profiles in ${secondsTaken} seconds`
   )
 }
 
@@ -149,6 +154,8 @@ async function indexProfiles() {
 
     // Skip test accounts
     if (username.startsWith('__tt_')) continue
+    // Skip unregistered accounts (TODO: read this from the contract)
+    if (username === 'spoon' || username === 'gdip') continue
 
     // Get directory URL from contract
     const directoryUrl = await registryContract
@@ -218,37 +225,39 @@ async function indexProfiles() {
       address: farcasterAddress,
       connected_address: directory.connectedAddress,
       wallet_balance: walletBalance,
+      registered_at: profile?.registeredAt || null,
+      bio: profile?.bio || null,
     }
 
     allProfiles.push(formatted)
   }
 
-  const { count: upsertedProfiles, error: upsertErr } = await supabase
-    .from('profiles')
-    .upsert(allProfiles, {
+  const chunks = breakIntoChunks(allProfiles, 1000)
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i]
+
+    const { error } = await supabase.from('profiles').upsert(chunk, {
       onConflict: 'index',
-      count: 'exact',
     })
 
-  if (upsertErr) {
-    console.log(allProfiles)
-    console.error(upsertErr)
-    return
+    if (error) {
+      console.error(error)
+      return
+    }
   }
 
   const endTime = Date.now()
   const secondsTaken = (endTime - startTime) / 1000
-  console.log(
-    `Indexed ${upsertedProfiles} directories in ${secondsTaken} seconds`
-  )
+  console.log(`Indexed all directories in ${secondsTaken} seconds`)
 }
 
-// Run job every 2 hours
-cron.schedule('0 */2 * * *', () => {
+// Run job every 6 hours
+cron.schedule('0 */6 * * *', () => {
   indexProfiles()
 })
 
-// Run job 30 mins
-cron.schedule('*/30 * * * *', () => {
+// Run job every hour
+cron.schedule('0 * * * *', () => {
   indexCasts()
 })

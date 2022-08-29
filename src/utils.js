@@ -137,6 +137,8 @@ export async function getProfileInfo(farcasterAddress) {
     .then((res) => {
       return {
         name: res.user.displayName,
+        bio: res.user.profile?.bio?.text,
+        registeredAt: res.user.registeredAt,
         followers: res.followStats.numFollowers,
       }
     })
@@ -180,16 +182,12 @@ export async function getErc20Balance({ address, tokenAddress, decimals }) {
     .json()
     .then(async (res) => {
       if (res.status === '0') {
-        console.error(
-          'Error getting ERC-20 balance. Checking fallback.',
-          res.result
-        )
         return await got(
           `https://erc20-balance.vercel.app/api/balance?token=${tokenAddress}&owner=${address}&decimals=${decimals}`
         )
           .json()
           .then((res) => {
-            console.log('Fallback custom API worked')
+            console.log('Fallback API used')
             return Number(res.balance)
           })
           .catch(() => 0)
@@ -226,4 +224,18 @@ export async function getNftCollectionValue(address) {
 
       return totalPrice
     })
+}
+
+/**
+ * Break a large array into smaller chunks.
+ * @param {array} array Array to break into smaller chunks
+ * @param {number} chunkSize Size of each chunk
+ * @returns {array} Array of smaller chunks
+ */
+export function breakIntoChunks(array, chunkSize) {
+  const chunks = []
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize))
+  }
+  return chunks
 }
