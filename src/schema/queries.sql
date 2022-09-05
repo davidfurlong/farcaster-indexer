@@ -92,14 +92,18 @@ GROUP BY
 followers_per_profile AS (
   SELECT
     address,
+    avatar,
+    display_name,
     username,
     followers
   FROM
     profiles
+  WHERE (to_timestamp(registered_at / 1000) < (now() - interval '14 days'))
 )
 SELECT
-  followers_per_profile.address AS address,
   username,
+  avatar,
+  display_name,
   casts_per_profile.count AS casts,
   followers,
   reactions,
