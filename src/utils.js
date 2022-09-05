@@ -191,9 +191,9 @@ export async function getErc20Balance({ address, tokenAddress, decimals }) {
         return res.result / decimals
       }
     })
-    .catch((err) => {
+    .catch(async (err) => {
       console.error('Error getting ERC-20 balance from Etherscan.', err)
-      return 0
+      return await useBackupApi().catch(() => 0)
     })
 
   async function useBackupApi() {
