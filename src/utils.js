@@ -50,6 +50,10 @@ export async function getWalletValue({
   )
     .json()
     .then((res) => res.result[0].balance / 1e18)
+    .catch((err) => {
+      console.error('Error getting ETH balance from Etherscan.', err)
+      return 0
+    })
 
   const wethBalance = await getErc20Balance({
     address,
@@ -182,19 +186,30 @@ export async function getErc20Balance({ address, tokenAddress, decimals }) {
     .json()
     .then(async (res) => {
       if (res.status === '0') {
-        return await got(
-          `https://erc20-balance.vercel.app/api/balance?token=${tokenAddress}&owner=${address}&decimals=${decimals}`
-        )
-          .json()
-          .then((res) => {
-            console.log('Fallback API used')
-            return Number(res.balance)
-          })
-          .catch(() => 0)
+        return await useBackupApi()
       } else {
         return res.result / decimals
       }
     })
+    .catch((err) => {
+      console.error('Error getting ERC-20 balance from Etherscan.', err)
+      return 0
+    })
+
+  async function useBackupApi() {
+    return await got(
+      `https://erc20-balance.vercel.app/api/balance?token=${tokenAddress}&owner=${address}&decimals=${decimals}`
+    )
+      .json()
+      .then((res) => {
+        console.log('Fallback API used')
+        return Number(res.balance)
+      })
+      .catch((err) => {
+        console.error('Error getting ERC-20 balance from fallback API.', err)
+        return 0
+      })
+  }
 }
 
 /**
