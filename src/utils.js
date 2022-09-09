@@ -51,7 +51,7 @@ export async function getWalletValue({
     .json()
     .then((res) => res.result[0].balance / 1e18)
     .catch((err) => {
-      console.error('Error getting ETH balance from Etherscan.', err)
+      console.error('Error getting ETH balance from Etherscan.', err.message)
       return 0
     })
 
@@ -146,6 +146,10 @@ export async function getProfileInfo(farcasterAddress) {
         followers: res.followStats.numFollowers,
       }
     })
+    .catch((err) => {
+      console.error('Error getting profile info from Farcaster.', err.message)
+      return null
+    })
 }
 
 /**
@@ -158,6 +162,10 @@ export async function getEthPrice() {
   )
     .json()
     .then((res) => res.ethereum.usd)
+    .catch((err) => {
+      console.error('Error getting ETH price from Coingecko.', err.message)
+      return 1700
+    })
 }
 
 /**
@@ -171,6 +179,13 @@ export async function getErc20Price(coinId) {
   )
     .json()
     .then((res) => res[coinId].usd)
+    .catch((err) => {
+      console.error(
+        `Error getting ${coinId} price from Coingecko.`,
+        err.message
+      )
+      return 0
+    })
 }
 
 /**
@@ -193,7 +208,7 @@ export async function getErc20Balance({ address, tokenAddress, decimals }) {
     })
     .catch(async (err) => {
       console.error('Error getting ERC-20 balance from Etherscan.', err)
-      return await useBackupApi().catch(() => 0)
+      return await useBackupApi()
     })
 
   async function useBackupApi() {
@@ -238,6 +253,13 @@ export async function getNftCollectionValue(address) {
       }, 0)
 
       return totalPrice
+    })
+    .catch((err) => {
+      console.error(
+        `Error getting NFT collection value from OpenSea for ${address}.`,
+        err.message
+      )
+      return 0
     })
 }
 

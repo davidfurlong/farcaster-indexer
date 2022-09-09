@@ -175,10 +175,7 @@ async function indexProfiles() {
         res.username = username
         return res
       })
-      .catch(() => {
-        console.log(`Error getting directory for @${username} (${i})`)
-        return null
-      })
+      .catch(() => null)
 
     if (!directory) continue
 
